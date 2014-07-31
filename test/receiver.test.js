@@ -18,7 +18,8 @@ lab.experiment('assertValid()', function() {
   lab.beforeEach(function(done) {
     env = receiver.getEnv();
     receiver.setEnv({
-      RECEIVER_REPO_OWNER: 'test'
+      RECEIVER_REPO_OWNER: 'test',
+      RECEIVER_USE_SSH: 'false',
     });
     done();
   });
@@ -163,7 +164,7 @@ lab.experiment('assertValid()', function() {
   lab.test('bad repository url', function(done) {
 
     lab.assert.throws(function() {
-      receiver.setEnv({ RECEIVER_USE_SSH: true });
+      receiver.setEnv({ RECEIVER_USE_SSH: 'true' });
       var push = {
         after: 'asdf',
         ref: 'refs/heads/master',
@@ -177,6 +178,7 @@ lab.experiment('assertValid()', function() {
     }, 'bad repository url', 'wrong user');
 
     lab.assert.throws(function() {
+      receiver.setEnv({ RECEIVER_USE_SSH: 'false' });
       var push = {
         after: 'asdf',
         ref: 'refs/heads/master',
@@ -190,7 +192,7 @@ lab.experiment('assertValid()', function() {
     }, 'bad repository url', 'wrong hostname');
 
     lab.assert.throws(function() {
-      receiver.setEnv({ RECEIVER_USE_SSH: true });
+      receiver.setEnv({ RECEIVER_USE_SSH: 'true' });
       var push = {
         after: 'asdf',
         ref: 'refs/heads/master',
@@ -204,6 +206,7 @@ lab.experiment('assertValid()', function() {
     }, 'bad repository url', 'wrong hostname');
 
     lab.assert.throws(function() {
+      receiver.setEnv({ RECEIVER_USE_SSH: 'false' });
       var push = {
         after: 'asdf',
         ref: 'refs/heads/master',
@@ -214,10 +217,10 @@ lab.experiment('assertValid()', function() {
         }
       };
       receiver.assertValid(push);
-    }, 'bad repository url', 'wrong owner');
+    }, 'bad repo owner', 'wrong owner');
 
     lab.assert.throws(function() {
-      receiver.setEnv({ RECEIVER_USE_SSH: true });
+      receiver.setEnv({ RECEIVER_USE_SSH: 'true' });
       var push = {
         after: 'asdf',
         ref: 'refs/heads/master',
@@ -228,7 +231,7 @@ lab.experiment('assertValid()', function() {
         }
       };
       receiver.assertValid(push);
-    }, 'bad repository url', 'wrong owner');
+    }, 'bad repo owner', 'wrong owner');
 
     done();
   });
