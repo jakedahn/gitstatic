@@ -235,7 +235,7 @@ function run(job) {
   if (exports.get('RECEIVER_USE_SSH') === 'true') {
     cloneUrl = push.repository.ssh_url;
   } else {
-    cloneUrl = push.repository.url,
+    cloneUrl = push.repository.url;
   }
 
   var args = [
