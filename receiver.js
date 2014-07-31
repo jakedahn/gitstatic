@@ -52,6 +52,67 @@ exports.get = function(key, opt_cast) {
 };
 
 
+/*
+ * Remove a string from the end of a string if it is a suffix; otherwise,
+ * return the string unchanged.
+ * @param {String} suffix
+ * @param {String} string
+ * @return {String}
+ */
+function stripSuffix(suffix, str) {
+  var lastIndex = str.lastIndexOf(suffix);
+  if (lastIndex === str.length - suffix.length) {
+    return str.substring(0, lastIndex);
+  } else {
+    return str;
+  }
+}
+
+
+/*
+ * Asserts that an SSH url included in a push event payload is valid. Throws
+ * `assert.AssertionError` if invalid.
+ * @param {string} url SSH url
+ * @return {Object} information obtained from parsing the url.
+ */
+function assertValidSshUrl(urlString) {
+  var parsed;
+  assert.doesNotThrow(function() {
+    parsed = sshUrl.parse(urlString);
+  });
+  var message = 'bad repository url: ' + urlString;
+  assert.equal(parsed.user, 'git', message);
+  assert.equal(parsed.hostname, 'github.com', message);
+  var parts = parsed.pathname.split('/');
+  return {
+    'owner': parts[1],
+    'name': stripSuffix('.git', parts[2])
+  };
+}
+
+
+/*
+ * Asserts that an HTTPS url included in a push event payload is valid. Throws
+ * `assert.AssertionError` if invalid.
+ * @param {string} url HTTPS url
+ * @return {Object} information obtained from parsing the url.
+ */
+function assertValidHttpsUrl(urlString) {
+  var parsed;
+  assert.doesNotThrow(function() {
+    parsed = url.parse(urlString);
+  });
+  var message = 'bad repository url: ' + urlString;
+  assert.equal(parsed.protocol, 'https:', message);
+  assert.equal(parsed.hostname, 'github.com', message);
+  var parts = parsed.pathname.split('/');
+  return {
+    'owner': parts[1],
+    'name': parts[2]
+  };
+}
+
+
 /**
  * Asserts that a push event payload is valid.  Throws `assert.AssertionError`
  * if invalid.
@@ -68,7 +129,8 @@ exports.assertValid = function(push) {
     urlInfo = assertValidHttpsUrl(push.repository.url);
   }
 
-  assert.equal(urlInfo.owner, exports.get('RECEIVER_REPO_OWNER'), message);
+  assert.equal(urlInfo.owner, exports.get('RECEIVER_REPO_OWNER'),
+      'bad repo owner');
   assert.equal(urlInfo.name, push.repository.name, 'bad repo name');
 
   // confirm other details are present
@@ -76,51 +138,7 @@ exports.assertValid = function(push) {
   assert.equal(typeof push.ref, 'string', 'no ref');
   assert.equal(typeof push.after, 'string', 'no after');
   return true;
-}
-
-
-/*
- * Asserts that an SSH url included in a push event payload is valid. Throws
- * `assert.AssertionError` if invalid.
- * @param {string} url SSH url
- * @return {Object} information obtained from parsing the url.
- */
-assertValidSshUrl = function(url) {
-  var parsed;
-  assert.doesNotThrow(function() {
-    parsed = sshUrl.parse(push.repository.ssh_url);
-  });
-  var message = 'bad repository url: ' + push.repository.ssh_url;
-  assert.equal(parsed.user, 'git', message);
-  assert.equal(parsed.hostname, 'github.com', message);
-  var parts = parsed.pathname.split('/');
-  return {
-    'owner': parts[1],
-    'name': parts[2]
-  };
 };
-
-
-/*
- * Asserts that an HTTPS url included in a push event payload is valid. Throws
- * `assert.AssertionError` if invalid.
- * @param {string} url HTTPS url
- * @return {Object} information obtained from parsing the url.
- */
-assertValidHttpsUrl = function(url) {
-  var parsed;
-  assert.doesNotThrow(function() {
-    parsed = url.parse(push.repository.url);
-  });
-  var message = 'bad repository url: ' + push.repository.url;
-  assert.equal(parsed.protocol, 'https:', message);
-  assert.equal(parsed.hostname, 'github.com', message);
-  var parts = parsed.pathname.split('/');
-  return {
-    'owner': parts[1],
-    'name': parts[2]
-  };
-}
 
 
 /**
