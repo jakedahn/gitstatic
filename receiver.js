@@ -61,7 +61,31 @@ exports.get = function(key, opt_cast) {
 exports.assertValid = function(push) {
   assert.ok(push.repository, 'no repository');
 
-  // confirm the ssh url is valid
+  var urlInfo;
+  if (exports.get('RECEIVER_USE_SSH') === 'true') {
+    urlInfo = assertValidSshUrl(push.repository.ssh_url);
+  } else {
+    urlInfo = assertValidHttpsUrl(push.repository.url);
+  }
+
+  assert.equal(urlInfo.owner, exports.get('RECEIVER_REPO_OWNER'), message);
+  assert.equal(urlInfo.name, push.repository.name, 'bad repo name');
+
+  // confirm other details are present
+  assert.equal(typeof push.repository.master_branch, 'string', 'no master');
+  assert.equal(typeof push.ref, 'string', 'no ref');
+  assert.equal(typeof push.after, 'string', 'no after');
+  return true;
+}
+
+
+/*
+ * Asserts that an SSH url included in a push event payload is valid. Throws
+ * `assert.AssertionError` if invalid.
+ * @param {string} url SSH url
+ * @return {Object} information obtained from parsing the url.
+ */
+assertValidSshUrl = function(url) {
   var parsed;
   assert.doesNotThrow(function() {
     parsed = sshUrl.parse(push.repository.ssh_url);
@@ -70,16 +94,33 @@ exports.assertValid = function(push) {
   assert.equal(parsed.user, 'git', message);
   assert.equal(parsed.hostname, 'github.com', message);
   var parts = parsed.pathname.split('/');
-  assert.equal(parts.length, 3, message);
-  assert.equal(parts[1], exports.get('RECEIVER_REPO_OWNER'), message);
-
-  // confirm other details are present
-  assert.equal(push.repository.name, parts[2], 'bad repo name');
-  assert.equal(typeof push.repository.master_branch, 'string', 'no master');
-  assert.equal(typeof push.ref, 'string', 'no ref');
-  assert.equal(typeof push.after, 'string', 'no after');
-  return true;
+  return {
+    'owner': parts[1],
+    'name': parts[2]
+  };
 };
+
+
+/*
+ * Asserts that an HTTPS url included in a push event payload is valid. Throws
+ * `assert.AssertionError` if invalid.
+ * @param {string} url HTTPS url
+ * @return {Object} information obtained from parsing the url.
+ */
+assertValidHttpsUrl = function(url) {
+  var parsed;
+  assert.doesNotThrow(function() {
+    parsed = url.parse(push.repository.url);
+  });
+  var message = 'bad repository url: ' + push.repository.url;
+  assert.equal(parsed.protocol, 'https:', message);
+  assert.equal(parsed.hostname, 'github.com', message);
+  var parts = parsed.pathname.split('/');
+  return {
+    'owner': parts[1],
+    'name': parts[2]
+  };
+}
 
 
 /**
