@@ -286,12 +286,17 @@ exports.Job = function(push, emitter) {
 
 
 /**
- * Generate a link to the GitHub page for the pushed commit.
+ * Generate a to the GitHub page for the pushed commit, or failing that, a
+ * string identifying the commit.
  * @param {Object} push A push event.
  * @return {string} A URL.
  */
 function link(push) {
-  return push.repository.url + '/tree/' + push.after;
+  if (typeof push.repository.url === 'string') {
+    return push.repository.url + '/tree/' + push.after;
+  } else {
+    return push.repository.ssh_url + ' at ' + push.after;
+  }
 }
 
 
@@ -317,8 +322,6 @@ function run(job) {
   }
   runningJobs[name] = job;
 
-  // GitHub push events don't include the SSH clone URL
-  // so we force a conversion here
   var cloneUrl;
   if (exports.get('RECEIVER_USE_SSH') === 'true') {
     cloneUrl = push.repository.ssh_url;
@@ -378,8 +381,9 @@ function run(job) {
  */
 exports.make = function(push) {
   if (push.ref !== 'refs/heads/' + push.repository.master_branch) {
+    var repoUrl = push.repository.url || push.repository.ssh_url;
     log('debug', 'skipping push for %s of %s (default branch is %s)',
-        push.ref, push.repository.url, push.repository.master_branch);
+        push.ref, repoUrl, push.repository.master_branch);
     return null;
   }
   var emitter = new events.EventEmitter();
