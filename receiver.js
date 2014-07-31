@@ -51,6 +51,97 @@ exports.get = function(key, opt_cast) {
 };
 
 
+/*
+ * Remove a string from the end of a string if it is a suffix; otherwise,
+ * return the string unchanged.
+ * @param {String} suffix
+ * @param {String} string
+ * @return {String}
+ */
+function stripSuffix(suffix, str) {
+  var lastIndex = str.lastIndexOf(suffix);
+  if (lastIndex === str.length - suffix.length) {
+    return str.substring(0, lastIndex);
+  } else {
+    return str;
+  }
+}
+
+
+/*
+ * Parse an SSH url, optionally SCP-style (ie, user@host:path/to/something)
+ * @param {String} url
+ * @return {Object}
+ */
+function parseSshUrl(urlString) {
+  if (typeof urlString !== 'string') {
+    throw new TypeError('Parameter \'url\' must be a string');
+  }
+  var parsed;
+  if (urlString.indexOf('ssh://') === 0) {
+    parsed = url.parse(urlString);
+    return {
+      protocol: parsed.protocol,
+      user: parsed.auth,
+      hostname: parsed.hostname,
+      pathname: parsed.pathname,
+    };
+  } else {
+    parsed = url.parse('ssh://' + urlString);
+    return {
+      protocol: null,
+      user: parsed.auth,
+      hostname: parsed.hostname,
+      pathname: (parsed.pathname || '').replace(/^\/:/, '/'),
+    };
+  }
+}
+
+
+/*
+ * Asserts that an SSH url included in a push event payload is valid. Throws
+ * `assert.AssertionError` if invalid.
+ * @param {string} url SSH url
+ * @return {Object} information obtained from parsing the url.
+ */
+function assertValidSshUrl(urlString) {
+  var parsed;
+  assert.doesNotThrow(function() {
+    parsed = parseSshUrl(urlString);
+  });
+  var message = 'bad repository url: ' + urlString;
+  assert.equal(parsed.user, 'git', message);
+  assert.equal(parsed.hostname, 'github.com', message);
+  var parts = parsed.pathname.split('/');
+  return {
+    'owner': parts[1],
+    'name': stripSuffix('.git', parts[2])
+  };
+}
+
+
+/*
+ * Asserts that an HTTPS url included in a push event payload is valid. Throws
+ * `assert.AssertionError` if invalid.
+ * @param {string} url HTTPS url
+ * @return {Object} information obtained from parsing the url.
+ */
+function assertValidHttpsUrl(urlString) {
+  var parsed;
+  assert.doesNotThrow(function() {
+    parsed = url.parse(urlString);
+  });
+  var message = 'bad repository url: ' + urlString;
+  assert.equal(parsed.protocol, 'https:', message);
+  assert.equal(parsed.hostname, 'github.com', message);
+  var parts = parsed.pathname.split('/');
+  return {
+    'owner': parts[1],
+    'name': parts[2]
+  };
+}
+
+
 /**
  * Asserts that a push event payload is valid.  Throws `assert.AssertionError`
  * if invalid.
@@ -60,25 +151,55 @@ exports.get = function(key, opt_cast) {
 exports.assertValid = function(push) {
   assert.ok(push.repository, 'no repository');
 
-  // confirm the repo url is valid
-  var parsed;
-  assert.doesNotThrow(function() {
-    parsed = url.parse(push.repository.url);
-  });
-  var message = 'bad repository url: ' + parsed.href;
-  assert.equal(parsed.protocol, 'https:', message);
-  assert.equal(parsed.hostname, 'github.com', message);
-  var parts = parsed.pathname.split('/');
-  assert.equal(parts.length, 3, message);
-  assert.equal(parts[1], exports.get('RECEIVER_REPO_OWNER'), message);
+  var urlInfo;
+  if (exports.get('RECEIVER_USE_SSH') === 'true') {
+    urlInfo = assertValidSshUrl(push.repository.ssh_url);
+  } else {
+    urlInfo = assertValidHttpsUrl(push.repository.url);
+  }
+
+  assert.equal(urlInfo.owner, exports.get('RECEIVER_REPO_OWNER'),
+      'bad repo owner');
+  assert.equal(urlInfo.name, push.repository.name, 'bad repo name');
 
   // confirm other details are present
-  assert.equal(push.repository.name, parts[2], 'bad repo name');
   assert.equal(typeof push.repository.master_branch, 'string', 'no master');
   assert.equal(typeof push.ref, 'string', 'no ref');
   assert.equal(typeof push.after, 'string', 'no after');
   return true;
 };
+
+
+/**
+ * Log levels.
+ * @enum {string}
+ */
+var LOG_LEVELS = {
+  silent: 5,
+  error: 4,
+  info: 3,
+  verbose: 2,
+  debug: 1
+};
+
+
+/**
+ * Log a message.
+ * @param {string} level Log level.
+ * @param {string} msg Message.
+ */
+function log(level, msg) {
+  msg = util.format.apply(util, Array.prototype.slice.call(arguments, 1));
+  msg = util.format('[%s] %s - %s',
+      level.charAt(0).toUpperCase(), new Date().toISOString(), msg);
+  if (LOG_LEVELS[level] >= LOG_LEVELS[exports.get('RECEIVER_LOG_LEVEL')]) {
+    if (level === 'error') {
+      process.stderr.write(msg + '\n');
+    } else {
+      process.stdout.write(msg + '\n');
+    }
+  }
+}
 
 
 /**
@@ -165,47 +286,18 @@ exports.Job = function(push, emitter) {
 
 
 /**
- * Make the site based on a push event.
- * @param {Object} push Push event.
- * @return {events.EventEmitter} An event emitter (or `null` if no job was
- *     started).  This will fire an `error` event if the job fails, an `end`
- *     event if it succeeds, or an `abort` event if it is not run due to another
- *     job being scheduled for the same repository.
- */
-exports.make = function(push) {
-  if (push.ref !== 'refs/heads/' + push.repository.master_branch) {
-    log('debug', 'skipping push for %s of %s (default branch is %s)',
-        push.ref, push.repository.url, push.repository.master_branch);
-    return null;
-  }
-  var emitter = new events.EventEmitter();
-  var job = new exports.Job(push, emitter);
-  process.nextTick(run.bind(null, job));
-  return emitter;
-};
-
-
-/**
- * Generate a link to the GitHub page for the pushed commit.
+ * Generate a to the GitHub page for the pushed commit, or failing that, a
+ * string identifying the commit.
  * @param {Object} push A push event.
  * @return {string} A URL.
  */
 function link(push) {
-  return push.repository.url + '/tree/' + push.after;
+  if (typeof push.repository.url === 'string') {
+    return push.repository.url + '/tree/' + push.after;
+  } else {
+    return push.repository.ssh_url + ' at ' + push.after;
+  }
 }
-
-
-/**
- * Convert a GitHub HTTPS clone URL to a SSH clone URL.  Since push events
- * from GitHub don't include the SSH clone URL, we have to do the conversion
- * here.
- * @param {string} httpsUrl HTTPS clone URL.
- * @return {string} SSH clone URL.
- */
-exports.sshUrl = function(httpsUrl) {
-  var parts = url.parse(httpsUrl);
-  return 'git@' + parts.hostname + ':' + parts.path.substr(1);
-};
 
 
 /**
@@ -213,7 +305,7 @@ exports.sshUrl = function(httpsUrl) {
  * job will be queued.
  * @param {Job} job The job to run.
  */
-var run = function(job) {
+function run(job) {
   var push = job.push;
   var emitter = job.emitter;
   var name = push.repository.name;
@@ -230,17 +322,11 @@ var run = function(job) {
   }
   runningJobs[name] = job;
 
-  // GitHub push events don't include the SSH clone URL
-  // so we force a conversion here
-  var cloneUrl = push.repository.url;
+  var cloneUrl;
   if (exports.get('RECEIVER_USE_SSH') === 'true') {
-    try {
-      cloneUrl = exports.sshUrl(cloneUrl);
-    } catch (err) {
-      log('error', 'Unable to convert to SSH clone URL: %s', cloneUrl);
-      emitter.emit('error', err);
-      return;
-    }
+    cloneUrl = push.repository.ssh_url;
+  } else {
+    cloneUrl = push.repository.url;
   }
 
   var args = [
@@ -282,34 +368,55 @@ var run = function(job) {
       process.nextTick(run.bind(null, pending));
     }
   });
-};
-
-
-var LOG_LEVELS = {
-  silent: 5,
-  error: 4,
-  info: 3,
-  verbose: 2,
-  debug: 1
-};
-
-function log(level, msg) {
-  msg = util.format.apply(util, Array.prototype.slice.call(arguments, 1));
-  msg = util.format('[%s] %s - %s',
-      level.charAt(0).toUpperCase(), new Date().toISOString(), msg);
-  if (LOG_LEVELS[level] >= LOG_LEVELS[exports.get('RECEIVER_LOG_LEVEL')]) {
-    if (level === 'error') {
-      process.stderr.write(msg + '\n');
-    } else {
-      process.stdout.write(msg + '\n');
-    }
-  }
 }
 
+
+/**
+ * Make the site based on a push event.
+ * @param {Object} push Push event.
+ * @return {events.EventEmitter} An event emitter (or `null` if no job was
+ *     started).  This will fire an `error` event if the job fails, an `end`
+ *     event if it succeeds, or an `abort` event if it is not run due to another
+ *     job being scheduled for the same repository.
+ */
+exports.make = function(push) {
+  if (push.ref !== 'refs/heads/' + push.repository.master_branch) {
+    var repoUrl = push.repository.url || push.repository.ssh_url;
+    log('debug', 'skipping push for %s of %s (default branch is %s)',
+        push.ref, repoUrl, push.repository.master_branch);
+    return null;
+  }
+  var emitter = new events.EventEmitter();
+  var job = new exports.Job(push, emitter);
+  process.nextTick(run.bind(null, job));
+  return emitter;
+};
+
+
+/**
+ * Convert a GitHub HTTPS clone URL to a SSH clone URL.  Since push events
+ * from GitHub don't include the SSH clone URL, we have to do the conversion
+ * here.
+ * @param {string} httpsUrl HTTPS clone URL.
+ * @return {string} SSH clone URL.
+ */
+exports.sshUrl = function(httpsUrl) {
+  var parts = url.parse(httpsUrl);
+  return 'git@' + parts.hostname + ':' + parts.path.substr(1);
+};
+
+
+/**
+ * Assign properties from source objects to target if property names are not
+ * present in target.
+ * @param {Object} target Target object.
+ * @param {Object} source Source object(s).
+ * @return {Object} The modified target object.
+ */
 function defaults(target, source) {
   var args = Array.prototype.slice.call(arguments);
   target = args.shift();
-  while (source = args.shift()) {
+  for (source = args.shift(); source; source = args.shift()) {
     for (var key in source) {
       if (!(key in target)) {
         target[key] = source[key];
