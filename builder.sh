@@ -29,6 +29,31 @@ abort() {
   exit 1
 }
 
+#
+# get information for the specified key from the build metadata
+#
+get-build-meta() {
+  local key="$1"
+  local default="$2"
+
+  which jq >/dev/null || abort '"jq" executable not found'
+
+  if test -f "$CLONE/.gitstatic.json"; then
+    local result=$(jq -r <"$CLONE/.gitstatic.json" ".$key") || \
+      abort 'invalid JSON in build metadata file: .gitstatic.json'
+
+    if [ "$result" == "null" ]; then
+      if [ -n "$default" ]; then
+        echo "$default"
+      else
+        abort "missing build metadata: $key"
+      fi
+    fi
+  else
+    abort 'missing build metadata file: .gitstatic.json'
+  fi
+}
+
 if test $# -ne 5; then
   usage
 fi
@@ -41,7 +66,6 @@ STATIC_ROOT=$5
 
 CLONE=$CLONES_ROOT/$NAME
 TGZ=$CLONE/$NAME.tgz
-SITE_DIR=$STATIC_ROOT/$NAME/
 
 mkdir -p $STATIC_ROOT
 mkdir -p $CLONES_ROOT
@@ -53,7 +77,8 @@ fi
 pushd $CLONE 1>/dev/null
 git fetch --quiet origin
 git reset --quiet --hard $COMMIT_SHA
-make
+BUILD_COMMAND=$(get-build-meta 'build_command' 'make')
+$BUILD_COMMAND
 popd 1>/dev/null
 
 if [ ! -f $TGZ ]; then
@@ -62,5 +87,8 @@ fi
 
 TMP_DIR=`mktemp -d 2>/dev/null || mktemp -d -t $NAME`
 tar xzf $TGZ -C $TMP_DIR
+
+CNAME=$(get-build-meta 'cname')
+SITE_DIR="$STATIC_ROOT/$CNAME"
 
 rsync --recursive --update --delete --perms $TMP_DIR/* $SITE_DIR 1>/dev/null
