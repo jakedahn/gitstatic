@@ -48,6 +48,8 @@ get-build-meta() {
       else
         abort "missing build metadata: $key"
       fi
+    else
+      echo "$result"
     fi
   else
     abort 'missing build metadata file: .gitstatic.json'
