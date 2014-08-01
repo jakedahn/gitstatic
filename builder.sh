@@ -89,8 +89,10 @@ fi
 TMP_DIR=`mktemp -d 2>/dev/null || mktemp -d -t $NAME`
 tar xzf $TGZ -C $TMP_DIR
 
-CNAME=$(get-build-meta 'cname')
-[ -z "$CNAME" ] && abort 'missing cname'
-SITE_DIR="$STATIC_ROOT/$CNAME"
+SITE_CNAME=$(get-build-meta 'cname')
+if [ -z "$SITE_CNAME" ]; then
+  abort 'missing cname'
+fi
+SITE_DIR="$STATIC_ROOT/$SITE_CNAME"
 
 rsync --recursive --update --delete --perms $TMP_DIR/* $SITE_DIR 1>/dev/null
