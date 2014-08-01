@@ -83,13 +83,14 @@ $BUILD_COMMAND
 popd 1>/dev/null
 
 if [ ! -f $TGZ ]; then
-  abort "Make did not generate expected archive: $TGZ"
+  abort "build did not generate expected archive: $TGZ"
 fi
 
 TMP_DIR=`mktemp -d 2>/dev/null || mktemp -d -t $NAME`
 tar xzf $TGZ -C $TMP_DIR
 
 CNAME=$(get-build-meta 'cname')
+[ -n "$CNAME" ] && abort 'missing cname'
 SITE_DIR="$STATIC_ROOT/$CNAME"
 
 rsync --recursive --update --delete --perms $TMP_DIR/* $SITE_DIR 1>/dev/null
