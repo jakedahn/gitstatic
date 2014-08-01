@@ -76,8 +76,8 @@ fi
 
 pushd $CLONE 1>/dev/null
 git fetch --quiet origin
-git submodule update --init
 git reset --quiet --hard $COMMIT_SHA
+git submodule update --init
 BUILD_COMMAND=$(get-build-meta 'build_command' 'make')
 $BUILD_COMMAND
 popd 1>/dev/null
