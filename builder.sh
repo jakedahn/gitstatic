@@ -76,6 +76,7 @@ fi
 
 pushd $CLONE 1>/dev/null
 git fetch --quiet origin
+git submodule update --init
 git reset --quiet --hard $COMMIT_SHA
 BUILD_COMMAND=$(get-build-meta 'build_command' 'make')
 $BUILD_COMMAND
