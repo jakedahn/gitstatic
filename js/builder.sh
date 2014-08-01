@@ -60,16 +60,17 @@ if test $# -ne 5; then
   usage
 fi
 
-# NAME=$1
-# REPO_URL=$2
-# COMMIT_SHA=$3
-# CLONES_ROOT=$4
-# STATIC_ROOT=$5
+NAME=$1
+REPO_URL=$2
+COMMIT_SHA=$3
+CLONES_ROOT=$4
+STATIC_ROOT=$5
 
-REPO_URL=$1 # where does the code live
-BRANCH=$2 # what branch do we build
+CLONE=$CLONES_ROOT/$NAME
+TGZ=$CLONE/$NAME.tgz
 
-CLONE_TMP_DIR=`mktemp -d -t "$REPO_URL-$BRANCH"`
+mkdir -p $STATIC_ROOT
+mkdir -p $CLONES_ROOT
 
 if [ ! -d $CLONE ]; then
   git clone --quiet $REPO_URL $CLONE
