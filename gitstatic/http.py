@@ -9,6 +9,7 @@ app.config['PROPAGATE_EXCEPTIONS'] = True
 def index():
     return 'welcome to gitstatic'
 
+
 @app.route('/build', methods=['POST'])
 def build():
   params = flask.request.values.to_dict()

@@ -1,4 +1,3 @@
-import os
 import json
 import http
 import unittest
@@ -25,19 +24,6 @@ class TestJobsHTTP(unittest.TestCase):
         assert rv.status_code == 202
         res_json = json.loads(rv.data)
         assert res_json['msg'] == 'git url received'
-
-    # @mock_s3
-    # def test_create_job(self):
-    #     self._stub_s3_bucket()
-    #     data = {'input_scene': 'bar'}
-
-    #     rv = self.app.post('/v0/programs/foo/jobs',
-    #                        data=data,
-    #                        headers={'accept': 'application/json'})
-    #     assert rv.status_code == 200
-    #     foos = api.find_jobs('foo')
-    #     assert len(foos) == 1
-    #     assert foos[0].input_scene == 'bar'
 
 if __name__ == '__main__':
     unittest.main()
