@@ -36,7 +36,6 @@ def main():
     # repo.remotes.origin.fetch() # fetch origin
     repo.git.checkout('origin/%s' % args.git_ref, b=args.git_ref) # reset to desired git ref
     if not os.path.isfile(gitstatic_path):
-        import pdb; pdb.set_trace()
         raise SystemExit('Error: The repo you are trying to build does NOT '
                          'contain a .gitstatic.yml manifest file.')
     #FIXME(jake): the original builder.sh would grab submodules, we probably want this here too
