@@ -48,11 +48,12 @@ def main():
 
     subprocess.check_call(build_vars.get('build_command'), shell=True)
 
+    subprocess.check_call(['mkdir', '-p', deploy_path])
     rsync_cmd = 'rsync --recursive --update --delete --perms %s/* %s' % \
                 (tmpdir_build_path, deploy_path)
-    subprocess.check_call(rsync_cmd.split(' '))
+    subprocess.check_call(rsync_cmd, shell=True)
 
-    print 'Success! %s has been built and is now hosted at %s from path %s' % \
+    print 'Success! %s has been built and is now hosted at %s from path' % \
           (args.git_url, cname)
 
 
