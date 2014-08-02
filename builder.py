@@ -30,6 +30,7 @@ def main():
     gitstatic_path = '%s/.gitstatic.yml' % tmpdir
 
     subprocess.check_call(['git', 'clone', args.git_url, tmpdir])
+    os.chdir(tmpdir)
     subprocess.check_call(['git', 'fetch', 'origin'])
     subprocess.check_call(['git', 'checkout', 'origin/%s' % args.git_ref])
 
