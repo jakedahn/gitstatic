@@ -44,13 +44,12 @@ def main():
 
     cname = build_vars.get('cname')
     deploy_path = '%s/%s' % (args.web_root, cname)
-    build_script = build_vars.get('build_command').split(' ')
 
-    subprocess.check_call(build_script)
+    subprocess.check_call(build_vars.get('build_command'), shell=True)
 
     rsync_cmd = 'rsync --recursive --update --delete --perms %s/* %s' % \
                 (tmpdir_build_path, deploy_path)
-    rsync_res = subprocess.check_call(rsync_cmd.split(' '))
+    subprocess.check_call(rsync_cmd.split(' '))
 
     print 'Success! %s has been built and is now hosted at %s from path %s' % \
           (args.git_url, cname)
